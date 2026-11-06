@@ -1,0 +1,153 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+    <title>智慧港口泊位智能调度系统</title>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:opsz,wght@14..32,300;400;500;600;700;800&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0-beta3/css/all.min.css">
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+</head>
+<body>
+<div class="ocean-bg"><div class="wave"></div><div class="wave wave2"></div><div class="wave wave3"></div><div class="floating-ship"><i class="fas fa-ship"></i><i class="fas fa-water" style="font-size: 40px; margin-left: -30px;"></i></div></div>
+<div class="star-field" id="starField"></div>
+<header class="dashboard-header">
+    <div class="header-left">
+        <i class="fas fa-ship header-ship-icon"></i>
+        <h1 class="system-title">智慧港口泊位智能调度系统</h1>
+    </div>
+    <div class="header-right">
+        <div class="clock-wrapper">
+            <canvas id="analogClock" width="60" height="60"></canvas>
+            <div class="live-clock"><i class="fas fa-clock"></i> <span id="timeDisplay">--:--:--</span></div>
+        </div>
+    </div>
+</header>
+
+<div class="dashboard">
+    <div class="card">
+        <div class="card-header"><i class="fas fa-tower-broadcast"></i> 码头泊位</div>
+        <div style="margin: 8px 0 16px;">
+            <canvas id="berthCapabilityChart" width="300" height="180" style="width:100%; height:auto; max-height:220px;"></canvas>
+        </div>
+        <div style="display:flex; justify-content:center; margin-bottom:8px; font-size:0.8rem; opacity:0.9;">
+            <span id="berthCountDisplay">4 个泊位</span>
+        </div>
+        <!-- 泊位设置按钮 -->
+        <button id="openBerthConfigBtn" class="btn-primary" style="margin-top:8px;"><i class="fas fa-sliders-h"></i> 泊位设置</button>
+
+        <!--新增左侧下方小组件区域 -->
+        <div class="widgets-panel">
+            <!-- 运营快报指标 -->
+            <div class="mini-stats">
+                <div class="mini-stat-item">
+                    <i class="fas fa-ship"></i>
+                    <span id="totalShipsCount">0</span>
+                    <small>船舶总数</small>
+                </div>
+                <div class="mini-stat-item">
+                    <i class="fas fa-boxes"></i>
+                    <span id="totalTeuSum">0</span>
+                    <small>总TEU</small>
+                </div>
+                <div class="mini-stat-item">
+                    <i class="fas fa-star"></i>
+                    <span id="highPriorityCount">0</span>
+                    <small>高优先级</small>
+                </div>
+                <div class="mini-stat-item">
+                    <i class="fas fa-tachometer-alt"></i>
+                    <span id="totalQcCount">0</span>
+                    <small>总岸桥数</small>
+                </div>
+            </div>
+
+            <!-- 实时潮汐 & 环境模拟 -->
+            <div class="tide-info">
+                <div><i class="fas fa-water" style="color:#00e0ff;"></i> 实时潮汐: <strong id="tideHeight">--</strong> m <span id="tideStatus" style="font-size:0.7rem; background:#0a2a3f; padding:2px 8px; border-radius:20px;"></span></div>
+                <div><i class="fas fa-wind"></i> 港口能见度: 良好 | 风速: 3~5级</div>
+            </div>
+
+            <!-- 港口负荷指数 (动态) -->
+            <div class="load-factor">
+                <i class="fas fa-chart-line"></i> 当前港口负荷指数: 
+                <div style="display:inline-flex; align-items:center; gap:8px; width: 100%; margin-top: 4px;">
+                    <div style="flex:1; background:#1e3a5a; border-radius:20px; height:6px; overflow:hidden;">
+                        <div id="loadFactorBar" style="width:0%; height:100%; background: linear-gradient(90deg, #00b4ff, #3b82f6); border-radius:20px;"></div>
+                    </div>
+                    <span id="loadFactor" style="font-weight:700; min-width:45px;">0%</span>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- 中间船舶输入-->
+    <div class="card">
+        <div class="card-header"><i class="fas fa-ship"></i> 船舶到港计划</div>
+        <div class="input-group">
+            <input type="text" id="shipName" placeholder="船名">
+            <input type="number" id="shipLen" placeholder="长度(m)">
+            <input type="number" id="shipDraft" placeholder="吃水(m)" step="0.1">
+            <input type="number" id="shipTeu" placeholder="TEU">
+        </div>
+        <div class="input-group">
+            <input type="time" id="shipArrival" value="08:00">
+            <select id="shipPriority">
+                <option value="high">⚡ 高价值/急件</option>
+                <option value="mid" selected>📦 普通货轮</option>
+                <option value="low">🛳️ 支线/低优先级</option>
+            </select>
+            <button id="addShipBtn" class="btn-primary" style="margin:0; width:auto; padding:6px 24px;"><i class="fas fa-plus-circle"></i> 添加</button>
+        </div>
+        <div class="ship-list" id="shipListContainer">
+            <div style="text-align:center; padding:20px; opacity:0.7;"><i class="fas fa-info-circle"></i> 暂无船舶，请添加</div>
+        </div>
+        <button id="runSchedulerBtn" class="btn-primary">运行智能调度</button>
+    </div>
+
+    <!-- 右侧结果区域-->
+    <div class="card result-area">
+        <div class="card-header"><i class="fas fa-chart-network"></i> 泊位分配</div>
+        <div class="stats-cards">
+            <div class="stat"><i class="fas fa-hourglass-half"></i><span id="totalTimeStat">0</span><small>总在港时间(h)</small></div>
+            <div class="stat"><i class="fas fa-chart-pie"></i><span id="utilRate">0</span><small>泊位利用率%</small></div>
+            <div class="stat"><i class="fas fa-calendar-check"></i><span id="makespan">0</span><small>最大完工时间</small></div>
+        </div>
+        <div class="charts-row">
+            <div class="chart-box"><h4><i class="fas fa-chart-pie"></i> 泊位作业负载占比</h4><canvas id="pieChart" width="400" height="200" style="width:100%; height:auto; max-height:200px"></canvas></div>
+            <div class="chart-box"><h4><i class="fas fa-chart-line"></i> 船舶等待时间趋势</h4><canvas id="lineChart" width="400" height="200" style="width:100%; height:auto; max-height:200px"></canvas></div>
+        </div>
+        <div class="gantt-container" id="ganttChartArea">
+            <div style="text-align:center; padding:28px; color:#8EB2D4;"><i class="fas fa-chart-simple"></i> 调度结果甘特图将显示于此</div>
+        </div>
+        <div class="allocation-table-wrapper" id="allocationTableWrapper">
+            <div style="font-size:12px; padding:8px; text-align:center;">点击调度后展示泊位分配明细</div>
+        </div>
+    </div>
+</div>
+
+<!-- 泊位配置管理 -->
+<div id="berthModal" class="modal-overlay">
+    <div class="modal-container">
+        <h2><i class="fas fa-edit"></i> 泊位配置管理</h2>
+        <div style="overflow-x: auto;">
+            <table class="modal-table" id="modalBerthTable">
+                <thead><tr><th>泊位ID</th><th>最大吃水(m)</th><th>岸桥总数</th><th>效率(箱/h)</th><th>长度(m)</th><th>操作</th></tr></thead>
+                <tbody id="modalBerthTbody"></tbody>
+            </table>
+        </div>
+        <div class="modal-footer-toolbar">
+            <button id="addBerthRowBtn" class="add-row-btn"><i class="fas fa-plus"></i> 新增泊位</button>
+            <button id="resetDefaultInModalBtn" class="add-row-btn" style="background:#2a4a6a;"><i class="fas fa-undo-alt"></i> 重置默认</button>
+        </div>
+        <div class="modal-actions">
+            <button id="saveBerthConfigBtn" class="btn-modal btn-save"><i class="fas fa-save"></i> 保存配置</button>
+            <button id="closeModalBtn" class="btn-modal btn-cancel"><i class="fas fa-times"></i> 取消</button>
+        </div>
+    </div>
+</div>
+
+<script src="{{ url_for('static', filename='js/script.js') }}"></script>
+</body>
+</html>
